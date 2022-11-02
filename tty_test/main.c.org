@@ -1,0 +1,249 @@
+#include "common.h"
+
+//#include "shm_tool.h"
+#undef DEBUG_PRINT
+
+static struct termio oldtio,newtio;
+
+fd_set reads, temps;
+int fd_max;
+struct timeval timeout;
+int len, write_len = 0;
+
+int  ttyfd;
+int n_read = 0;
+int rcv_len=0;
+
+int gpio_dev;
+GPIO_INFO gpio;
+
+void KU_EN(int val)
+{
+	gpio.num = KU_TXEN;
+        gpio.val = val;
+        ioctl(gpio_dev, WR, &gpio);
+}
+
+void EXT_EN(int val)
+{
+	gpio.num = EXT_TXEN;
+        gpio.val = val;
+        ioctl(gpio_dev, WR, &gpio);
+}
+
+
+int tty_open(char *tty_port, char *baud)
+{
+	int dev = open(tty_port, O_RDWR);
+	int baud_rate = 0;
+	
+        if (dev < 0)
+        {
+                printf("[IPC_UI] ipc_if(%s) open fail.\r\n", tty_port);
+                exit(-1);
+        }
+
+	if(!strcmp("9600", baud)) baud_rate = B9600;
+	else if(!strcmp("19200",baud)) baud_rate = B19200;
+	else if(!strcmp("38400", baud)) baud_rate = B38400;
+	else if(!strcmp("57600", baud)) baud_rate = B57600;
+	else if(!strcmp("115200", baud)) baud_rate = B115200;
+	else return -1;
+	
+
+
+        /* serial port setting */
+        tcgetattr(dev,&oldtio); /* save current serial port settings */
+//        bzero(&newtio, sizeof(newtio)); /* clear struct for new port settings */
+	memset(&newtio, 0, sizeof(newtio)); /* clear struct for new port settings */
+        newtio.c_cflag = baud_rate | CS8 | CREAD | CLOCAL;
+        newtio.c_iflag = IGNPAR; // No Parity
+        newtio.c_oflag = 0;
+        tcsetattr(dev,TCSANOW,&newtio);
+
+        return dev;
+}
+
+unsigned int snd(char **arg) 
+{
+	int len, i;
+	int intr = 0;
+	unsigned char *pp;
+
+	char *msg = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n\r";
+
+	char *tty_port = arg[1];
+	char *baud     = arg[2];
+
+	if(!strcmp(tty_port, "/dev/ttymxc1"))
+		intr = RS485_1;
+	else if(!strcmp(tty_port, "/dev/ttymxc2"))
+		intr = RS485_2;
+	else if(!strcmp(tty_port, "/dev/ttymxc3"))
+		intr = RS485_3;
+	else if(!strcmp(tty_port, "/dev/ttymxc4"))
+		intr = RS485_4;
+	else if(!strcmp(tty_port, "/dev/ttymxc5"))
+		intr = RS485_5;
+	else if(!strcmp(tty_port, "/dev/ttymxc6"))
+		intr = RS485_6;
+	else
+		intr = RS232;
+
+        ttyfd = tty_open(tty_port, baud);
+
+	if(ttyfd > 0) printf("snd()- ttyfd Open Success\n");
+	else
+	{
+		printf("snd()- ttyfd Open Fail\n");
+		exit(1);
+	}
+
+	printf("snd(pid : %d)\n", getpid());
+
+	while(1)
+	{
+		len = strlen(msg);
+
+		if(intr == RS485_1)	// ttyS1
+		{
+			gpio_dev = open( NODE_FILE, O_RDWR|O_NONBLOCK );
+			if ( gpio_dev < 0 )
+			{
+				perror( NODE_FILE" open:");
+				return;
+			}
+
+			KU_EN(HIGH);	// Active High
+		#if 0
+			len = write(ttyfd, msg, len);
+		#else
+			pp = (unsigned char *)msg;
+			for(i=0; i<len; i++, pp++)
+			{
+				write(ttyfd, pp, 1);
+			}
+			usleep(1000*20);
+		#endif
+			KU_EN(LOW);
+
+			close(gpio_dev);
+		}
+		else if(intr == RS485_5) // ttyS5
+		{
+			gpio_dev = open( NODE_FILE, O_RDWR|O_NONBLOCK );
+			if ( gpio_dev < 0 )
+			{
+				perror( NODE_FILE" open:");
+				return;
+			}
+
+			EXT_EN(HIGH);
+		#if 0
+                        len = write(ttyfd, msg, len);
+                #else
+                        pp = (unsigned char *)msg;
+                        for(i=0; i<len; i++, pp++)
+                        {
+                                write(ttyfd, pp, 1);
+                        }
+                        usleep(1000*20);
+                #endif
+			EXT_EN(LOW);
+
+			close(gpio_dev);
+		}
+		else
+		{	// rs232
+			len = write(ttyfd, msg, len);
+		}
+		usleep(1000*100);
+	}
+
+	close(ttyfd);
+	exit(EXIT_FAILURE);
+}
+
+unsigned int rcv(char **arg)
+{
+	int i, j, rc;
+	char buf[100];
+
+	char *tty_port = arg[1];
+	char *baud     = arg[2];
+
+	memset(buf, 0, sizeof(buf));
+
+        ttyfd = tty_open(tty_port, baud);
+
+	if(ttyfd > 0) printf("rcv()- ttyfd Open Success\n");
+	else
+	{
+		printf("rcv()- ttyfd Open Fail\n");
+		exit(1);
+	}
+
+        FD_ZERO( &reads );
+
+        if( ttyfd > 0 )
+        {
+                FD_SET( ttyfd, &reads );
+        }
+
+	printf("rcv(pid : %d)\n", getpid());
+
+	while(1)
+	{
+#if 1
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0; // 1ms
+		temps = reads;
+
+		rc = select(ttyfd+1, &temps, NULL, NULL, &timeout );
+		
+		if(rc == -1)
+		{
+			printf("[MCA ETH_UI] select error\n");
+			return -1;
+		}
+
+		if ( !FD_ISSET(ttyfd, &temps ) )	continue;
+#endif
+
+		n_read = read(ttyfd, buf, sizeof(buf));
+//		printf("\n");
+//		printf("n_read = %d\n", n_read);
+		for(i=0; i<n_read; i++)
+		{
+			if(buf[i] != '\n' && buf[i] != '\r')
+				printf("%c",buf[i]); 
+		}
+		printf("\n\r%s> ", tty_port);
+	}
+
+	close(ttyfd);
+	exit(EXIT_FAILURE);
+}
+
+void help(void)
+{
+	printf("Usage : ttyS1~ttyS5 Loop Test Program\n");
+	printf("	./tty {/dev/ttyS1~5} {baudrate : 9600, 19200, 38400, 57600 115200} \n");
+}
+
+int main(int argc, char **argv)
+{
+	pid_t pid; 
+
+	if(argc < 3)
+	{
+		help();
+		return 0;
+	}
+
+	pid = fork();
+
+	if(pid == 0) rcv(argv);
+	else if(pid > 0) snd(argv);
+	else exit(EXIT_FAILURE);
+}

@@ -1,0 +1,118 @@
+#include "common.h"
+
+static struct termio oldtio,newtio;
+
+fd_set reads, temps;
+int fd_max;
+struct timeval timeout;
+int len, write_len = 0;
+
+int  ttyfd;
+int n_read = 0;
+int rcv_len=0;
+
+int tty_open(char *tty_port, char *baud)
+{
+	int dev = open(tty_port, O_RDWR);
+	int baud_rate = 0;
+	
+        if (dev < 0)
+        {
+                printf("[IPC_UI] ipc_if(%s) open fail.\r\n", tty_port);
+                exit(-1);
+        }
+
+	if(!strcmp("9600", baud)) baud_rate = B9600;
+	else if(!strcmp("19200",baud)) baud_rate = B19200;
+	else if(!strcmp("38400", baud)) baud_rate = B38400;
+	else if(!strcmp("57600", baud)) baud_rate = B57600;
+	else if(!strcmp("115200", baud)) baud_rate = B115200;
+	else return -1;
+	
+
+
+        /* serial port setting */
+        tcgetattr(dev,&oldtio); /* save current serial port settings */
+//        bzero(&newtio, sizeof(newtio)); /* clear struct for new port settings */
+	memset(&newtio, 0, sizeof(newtio)); /* clear struct for new port settings */
+        newtio.c_cflag = baud_rate | CS8 | CREAD | CLOCAL;
+        newtio.c_iflag = IGNPAR; // No Parity
+        newtio.c_oflag = 0;
+        tcsetattr(dev,TCSANOW,&newtio);
+
+        return dev;
+}
+
+void help(void)
+{
+	printf("Usage : ttyUSB0~ttyUSB3 ATcmd Program\n");
+	printf("	./tty {/dev/ttyUSB0~3} {baudrate : 9600, 19200, 38400, 57600 115200} \n");
+}
+
+int main(int argc, char **argv)
+{
+	int len, i;
+	int intr = 0;
+	unsigned char *pp;
+
+	char msg[128];
+
+	char *tty_port = arg[1];
+	char *cmd     = arg[2];
+
+        ttyfd = tty_open(tty_port, "115200");
+
+	if(ttyfd > 0) printf("%s(%s) Open Success\n", tty_port, baud);
+	else
+	{
+		printf("Open Fail\n");
+		exit(1);
+	}
+
+	memset(msg, 0, sizeof(msg));
+	sprintf(msg, "%s", cmd);
+
+	len = sizeof(msg);
+	msg[len++] = 0x0d;
+	msg[len++] = 0x0a;
+
+	write(ttyfd, msg, len);
+	printf("%s\n\r", msg);
+
+	FD_ZERO( &reads );
+	FD_SET( ttyfd, &reads );
+
+        while(1)
+        {
+                timeout.tv_sec = 3;
+                timeout.tv_usec = 0; // 1ms
+                temps = reads;
+
+                rc = select(ttyfd+1, &temps, NULL, NULL, &timeout );
+
+                if(rc == -1)
+                {
+                        printf("[MCA ETH_UI] select error\n");
+                        return -1;
+                }
+		else if(rc == 0)
+		{
+			break;
+		}
+
+                if ( !FD_ISSET(ttyfd, &temps ) )        continue;
+
+                n_read = read(ttyfd, buf, sizeof(buf));
+
+                for(i=0; i<n_read; i++)
+                {
+                        if(buf[i] != '\n' && buf[i] != '\r')
+                                printf("%c",buf[i]);
+                }
+        }
+
+	printf("End of ATcmd Execute.\n\r");
+	close(ttyfd);
+	exit(EXIT_SUCCESS);
+}
+

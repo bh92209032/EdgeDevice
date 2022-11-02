@@ -1,0 +1,270 @@
+#include "common.h"
+
+//#include "shm_tool.h"
+#undef DEBUG_PRINT
+
+static struct termio oldtio,newtio;
+
+fd_set reads, temps;
+int fd_max;
+struct timeval timeout;
+int len, write_len = 0;
+
+int  ttyfd;
+int n_read = 0;
+int rcv_len=0;
+
+int gpio_dev;
+GPIO_INFO gpio;
+
+void	en_gpio_init(void)
+{
+	// UART1 : DEBUG
+	// UART2 : RS232
+// used gpio
+	system("echo 102 > /sys/class/gpio/export");	// MODBUS1_UART3_TXEN 
+	system("echo 4 >   /sys/class/gpio/export");	// MODBUS2_UART4_TXEN
+	system("echo 5 >   /sys/class/gpio/export");	// MODBUS3_UART5_TXEN
+	system("echo 114 > /sys/class/gpio/export");	// MODBUS3_UART6_TXEN
+	system("echo 118 > /sys/class/gpio/export");	// MODBUS3_UART7_TXEN
+
+	system("echo out > /sys/class/gpio/gpio102/direction");
+	system("echo out > /sys/class/gpio/gpio4/direction");
+	system("echo out > /sys/class/gpio/gpio5/direction");
+	system("echo out > /sys/class/gpio/gpio114/direction");
+	system("echo out > /sys/class/gpio/gpio118/direction");
+}
+
+void	en_gpio_exit(void)
+{
+	system("echo 102 > /sys/class/gpio/unexport");	// MODBUS1_UART3_TXEN 
+	system("echo 4 >   /sys/class/gpio/unexport");	// MODBUS2_UART4_TXEN
+	system("echo 5 >   /sys/class/gpio/unexport");	// MODBUS3_UART5_TXEN
+	system("echo 114 > /sys/class/gpio/unexport");	// MODBUS3_UART6_TXEN
+	system("echo 118 > /sys/class/gpio/unexport");	// MODBUS3_UART7_TXEN
+}
+
+void KU_EN(int val, int idx)
+{
+#if 0
+	gpio.num = KU_TXEN;
+        gpio.val = val;
+        ioctl(gpio_dev, WR, &gpio);
+#else
+	switch(idx)
+	{
+	case MODBUS_RS485_1 :
+		if(val) system("echo 1 > /sys/class/gpio/gpio102/value");
+		else	system("echo 0 > /sys/class/gpio/gpio102/value");
+		break;
+	case MODBUS_RS485_2 :
+		if(val) system("echo 1 > /sys/class/gpio/gpio4/value");
+		else	system("echo 0 > /sys/class/gpio/gpio4/value");
+		break;
+	case MODBUS_RS485_3 :
+		if(val) system("echo 1 > /sys/class/gpio/gpio5/value");
+		else	system("echo 0 > /sys/class/gpio/gpio5/value");
+		break;
+	case MODBUS_RS485_4 :
+		if(val) system("echo 1 > /sys/class/gpio/gpio114/value");
+		else	system("echo 0 > /sys/class/gpio/gpio114/value");
+		break;
+	case MODBUS_RS485_5 :
+		if(val) system("echo 1 > /sys/class/gpio/gpio118/value");
+		else	system("echo 0 > /sys/class/gpio/gpio118/value");
+		break;
+	}
+#endif
+}
+
+
+int tty_open(char *tty_port, char *baud)
+{
+	int dev = open(tty_port, O_RDWR);
+	int baud_rate = 0;
+	
+        if (dev < 0)
+        {
+                printf("[IPC_UI] ipc_if(%s) open fail.\r\n", tty_port);
+                exit(-1);
+        }
+
+	if(!strcmp("9600", baud)) baud_rate = B9600;
+	else if(!strcmp("19200",baud)) baud_rate = B19200;
+	else if(!strcmp("38400", baud)) baud_rate = B38400;
+	else if(!strcmp("57600", baud)) baud_rate = B57600;
+	else if(!strcmp("115200", baud)) baud_rate = B115200;
+	else return -1;
+	
+
+
+        /* serial port setting */
+        tcgetattr(dev,&oldtio); /* save current serial port settings */
+//        bzero(&newtio, sizeof(newtio)); /* clear struct for new port settings */
+	memset(&newtio, 0, sizeof(newtio)); /* clear struct for new port settings */
+        newtio.c_cflag = baud_rate | CS8 | CREAD | CLOCAL;
+        newtio.c_iflag = IGNPAR; // No Parity
+        newtio.c_oflag = 0;
+        tcsetattr(dev,TCSANOW,&newtio);
+
+        return dev;
+}
+
+unsigned int snd(char **arg) 
+{
+	int len, i;
+	int intr = 0;
+	unsigned char *pp;
+
+	char *msg = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n\r";
+
+	char *tty_port = arg[1];
+	char *baud     = arg[2];
+
+//	if(!strcmp(tty_port, "/dev/ttymxc1")) intr = MODBUS_RS485_1;
+
+	if(!strcmp(tty_port, "/dev/ttymxc2"))
+		intr = MODBUS_RS485_1;
+	else if(!strcmp(tty_port, "/dev/ttymxc3"))
+		intr = MODBUS_RS485_2;
+	else if(!strcmp(tty_port, "/dev/ttymxc4"))
+		intr = MODBUS_RS485_3;
+	else if(!strcmp(tty_port, "/dev/ttymxc5"))
+		intr = MODBUS_RS485_4;
+	else if(!strcmp(tty_port, "/dev/ttymxc6"))
+		intr = MODBUS_RS485_5;
+	else
+	{
+		printf("Error return!!! \n\r");
+		return 0;
+	}
+
+
+        ttyfd = tty_open(tty_port, baud);
+
+	if(ttyfd > 0) printf("snd()- ttyfd Open Success\n");
+	else
+	{
+		printf("snd()- ttyfd Open Fail\n");
+		exit(1);
+	}
+
+	printf("snd(pid : %d)\n", getpid());
+
+	while(1)
+	{
+		len = strlen(msg);
+
+		/*
+		gpio_dev = open( NODE_FILE, O_RDWR|O_NONBLOCK );
+		if ( gpio_dev < 0 )
+		{
+			perror( NODE_FILE" open:");
+			return;
+		}
+		*/
+
+		KU_EN(HIGH, intr);	// Active High
+		pp = (unsigned char *)msg;
+		for(i=0; i<len; i++, pp++)
+		{
+			write(ttyfd, pp, 1);
+		}
+		usleep(1000*20);
+		KU_EN(LOW, intr);
+		//close(gpio_dev);
+		usleep(1000*500);
+	}
+
+	close(ttyfd);
+	exit(EXIT_SUCCESS);
+}
+
+unsigned int rcv(char **arg)
+{
+	int i, j, rc;
+	char buf[100];
+
+	char *tty_port = arg[1];
+	char *baud     = arg[2];
+
+	memset(buf, 0, sizeof(buf));
+
+        ttyfd = tty_open(tty_port, baud);
+
+	if(ttyfd > 0) printf("rcv()- ttyfd Open Success\n");
+	else
+	{
+		printf("rcv()- ttyfd Open Fail\n");
+		exit(1);
+	}
+
+        FD_ZERO( &reads );
+
+        if( ttyfd > 0 )
+        {
+                FD_SET( ttyfd, &reads );
+        }
+
+	printf("rcv(pid : %d)\n", getpid());
+
+	while(1)
+	{
+#if 1
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0; // 1ms
+		temps = reads;
+
+		rc = select(ttyfd+1, &temps, NULL, NULL, &timeout );
+		
+		if(rc == -1)
+		{
+			printf("[MCA ETH_UI] select error\n");
+			return -1;
+		}
+
+		if ( !FD_ISSET(ttyfd, &temps ) )	continue;
+#endif
+
+		n_read = read(ttyfd, buf, sizeof(buf));
+//		printf("\n");
+//		printf("n_read = %d\n", n_read);
+		for(i=0; i<n_read; i++)
+		{
+			if(buf[i] != '\n' && buf[i] != '\r')
+				printf("%c",buf[i]); 
+		}
+		printf("\n\r%s> ", tty_port);
+	}
+
+	close(ttyfd);
+
+	//en_gpio_exit();
+
+	exit(EXIT_SUCCESS);
+}
+
+void help(void)
+{
+	printf("Usage : ttymxc2~ttymxc6 Loop Test Program\n");
+	printf("	./tty {/dev/ttymxc2~6} {baudrate : 9600, 19200, 38400, 57600 115200} \n");
+}
+
+int main(int argc, char **argv)
+{
+	pid_t pid; 
+
+	if(argc < 3)
+	{
+		help();
+		return 0;
+	}
+
+	en_gpio_init();
+
+	pid = fork();
+
+	if(pid == 0) rcv(argv);
+	else if(pid > 0) snd(argv);
+	else exit(EXIT_SUCCESS);
+}

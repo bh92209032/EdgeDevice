@@ -1,0 +1,55 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+BAUDRATE	common.h	29;"	d
+CC	Makefile	/^CC=$(CROSS)gcc$/;"	m
+CFLAGS	Makefile	/^CFLAGS=-I\/home\/bh92032\/IMX7DL_Sabre\/linux-imx-rel_imx_4.1.15_1.2.0_ga\/include -I.\/include$/;"	m
+CROSS	Makefile	/^CROSS=\/home\/bh92032\/IMX7DL_Sabre\/gcc-linaro-arm-linux-gnueabihf-4.9-2014.09_linux\/bin\/arm-linux-gnueabihf-$/;"	m
+DEBUG_PRINT	main.c	4;"	d	file:
+EXT_TXEN	common.h	/^        EXT_TXEN,$/;"	e	enum:__anon1
+GPIO_INFO	common.h	/^}GPIO_INFO;$/;"	t	typeref:struct:__gpio_info__
+HIGH	common.h	45;"	d
+KU_EN	main.c	/^void KU_EN(int val, int idx)$/;"	f
+KU_TXEN	common.h	/^        KU_TXEN=0,$/;"	e	enum:__anon1
+LOW	common.h	46;"	d
+MODBUS_RS485_1	common.h	33;"	d
+MODBUS_RS485_2	common.h	34;"	d
+MODBUS_RS485_3	common.h	35;"	d
+MODBUS_RS485_4	common.h	36;"	d
+MODBUS_RS485_5	common.h	37;"	d
+MODBUS_RS485_6	common.h	38;"	d
+NODE_FILE	common.h	41;"	d
+OBJS	Makefile	/^OBJS=main.o$/;"	m
+PROG	Makefile	/^PROG=tty_edge$/;"	m
+RD	common.h	42;"	d
+RS232	common.h	32;"	d
+STRIP	Makefile	/^STRIP=$(CROSS)strip$/;"	m
+TARGET	Makefile	/^TARGET=\/media\/rootfs\/usr\/sbin$/;"	m
+WR	common.h	43;"	d
+_HCU_COMMON_H_	common.h	2;"	d
+__gpio_info__	common.h	/^typedef struct __gpio_info__$/;"	s
+en_gpio_init	main.c	/^void	en_gpio_init(void)$/;"	f
+fd_max	main.c	/^int fd_max;$/;"	v
+gpio	main.c	/^GPIO_INFO gpio;$/;"	v
+gpio_dev	main.c	/^int gpio_dev;$/;"	v
+help	main.c	/^void help(void)$/;"	f
+len	main.c	/^int len, write_len = 0;$/;"	v
+main	main.c	/^int main(int argc, char **argv)$/;"	f
+n_read	main.c	/^int n_read = 0;$/;"	v
+newtio	main.c	/^static struct termio oldtio,newtio;$/;"	v	typeref:struct:	file:
+num	common.h	/^        unsigned int num;$/;"	m	struct:__gpio_info__
+oldtio	main.c	/^static struct termio oldtio,newtio;$/;"	v	typeref:struct:termio	file:
+rcv	main.c	/^unsigned int rcv(char **arg)$/;"	f
+rcv_len	main.c	/^int rcv_len=0;$/;"	v
+reads	main.c	/^fd_set reads, temps;$/;"	v
+snd	main.c	/^unsigned int snd(char **arg) $/;"	f
+temps	main.c	/^fd_set reads, temps;$/;"	v
+termio	common.h	30;"	d
+timeout	main.c	/^struct timeval timeout;$/;"	v	typeref:struct:timeval
+tty_open	main.c	/^int tty_open(char *tty_port, char *baud)$/;"	f
+ttyfd	main.c	/^int  ttyfd;$/;"	v
+val	common.h	/^        unsigned int val;$/;"	m	struct:__gpio_info__
+write_len	main.c	/^int len, write_len = 0;$/;"	v
